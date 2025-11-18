@@ -5,7 +5,7 @@ if 'google.colab' in sys.modules:
     !pip install idaes-pse --pre
     !idaes get-extensions --to ./bin
     os.environ['PATH'] += ':bin'
-
+import yfinance as yf
 def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03), step=0.001):
     """
     Downloads stock data, analyzes returns, and models efficient frontier until full concentration.
