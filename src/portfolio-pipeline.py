@@ -5,7 +5,14 @@ if 'google.colab' in sys.modules:
     !pip install idaes-pse --pre
     !idaes get-extensions --to ./bin
     os.environ['PATH'] += ':bin'
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 import yfinance as yf
+import pyomo.environ as pyo
+
 def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03), step=0.001):
     """
     Downloads stock data, analyzes returns, and models efficient frontier until full concentration.
