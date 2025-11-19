@@ -1,6 +1,7 @@
-# Efficient Frontier Modeling Tool
+# Stock Porfolio Allocation Modeling
+*this project was designed for my Business Decision Modeling graduate class.
 
-This project uses Pyomo and financial data from Yahoo Finance to build and visualize efficient frontiers.
+This project uses Pyomo and financial data from Yahoo Finance to build and visualize efficient frontiers. All outputs are saved to a file in the local environment called 'BDM_Ouputs'. This model accounts for correlationand covariance of given stocks based on the date range provided. It then conducts a risk sweep and builds and Efficent Frontier to display risk and expected return. It also outputs weighted allocations to each stock.
 
 ## Structure
 - FOR COLLAB USE, YOU MUST USE AT THE TOP OF THE SCRIPT
