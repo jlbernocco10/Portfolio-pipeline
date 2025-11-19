@@ -2,7 +2,7 @@ import sys
 import os
 
 if 'google.colab' in sys.modules:
-    !pip install idaes-pse --pre
+    pip install idaes-pse --pre
     !idaes get-extensions --to ./bin
     os.environ['PATH'] += ':bin'
 
