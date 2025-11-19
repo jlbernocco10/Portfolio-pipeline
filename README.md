@@ -4,7 +4,7 @@
 This project uses Pyomo and financial data from Yahoo Finance to build and visualize efficient frontiers. All outputs are saved to a file in the local environment called 'BDM_Ouputs'. This model accounts for correlation and covariance of given stocks based on the date range provided. It then conducts a risk sweep and builds an Efficent Frontier to display risk and expected return. It also outputs weighted allocations for each stock.
 
 ## Structure
-- FOR COLLAB USE, YOU MUST USE AT THE TOP OF THE SCRIPT
+- FOR COLLAB USE, YOU MUST USE THIS AT THE TOP OF THE SCRIPT:
   
 ```python
 #This ensures the proper solvers are loaded for the main function
