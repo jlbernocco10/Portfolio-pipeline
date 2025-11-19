@@ -2,6 +2,7 @@ import sys
 import os
 
 import numpy as np
+import math
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
@@ -13,15 +14,6 @@ from pyomo.environ import (
     NonNegativeReals, minimize, SolverFactory, TerminationCondition
 )
 
-
-import os
-import yfinance as yf
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.ticker as mtick
-import seaborn as sns
-from pyomo.environ import ConcreteModel, Set, Var, NonNegativeReals, Objective, Constraint, minimize, SolverFactory, TerminationCondition
 
 def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03), step=0.001):
     output_dir = "BDM_Outputs"
@@ -61,7 +53,11 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
     plt.xlabel('Date'); plt.ylabel('Cumulative Return'); plt.grid(True); plt.tight_layout()
     plt.savefig(f"{output_dir}/cumulative_returns.png"); plt.close()
 
-    daily_returns.plot(subplots=True, grid=True, layout=(4, 4), figsize=(15, 15))
+    # Dynamic subplot layout
+    n = len(tickers)
+    cols = math.ceil(math.sqrt(n))
+    rows = math.ceil(n / cols)
+    daily_returns.plot(subplots=True, grid=True, layout=(rows, cols), figsize=(4 * cols, 3 * rows))
     plt.suptitle('Daily Simple Returns'); plt.tight_layout()
     plt.savefig(f"{output_dir}/daily_returns.png"); plt.close()
 
