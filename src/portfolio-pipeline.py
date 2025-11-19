@@ -1,11 +1,6 @@
 import sys
 import os
 
-if 'google.colab' in sys.modules:
-    pip install idaes-pse --pre
-    !idaes get-extensions --to ./bin
-    os.environ['PATH'] += ':bin'
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
