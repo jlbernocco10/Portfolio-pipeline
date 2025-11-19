@@ -10,13 +10,9 @@ import os
 os.environ['PATH'] += ':/content/bin'
 
 AT THE TOP OF THE SCRIPT***
-
-- `main.py`: Entry point for running the model
-- `SRC/`: Contains core logic and functions
-
-## How to Use
-1. Install dependencies: `pip install -r requirements.txt`
-2. Run `main.py` with your chosen tickers and date range
+- !git clone 'LINK'
+- !pip install -r /content/Portfolio-pipeline/requirements.txt
+- from portfolio_pipeline import BDM_Project
 
 ## Example
 ```python
