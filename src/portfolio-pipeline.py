@@ -9,6 +9,7 @@ if 'google.colab' in sys.modules:
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mtick
 import seaborn as sns
 import yfinance as yf
 import pyomo.environ as pyo
