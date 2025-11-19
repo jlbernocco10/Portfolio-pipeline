@@ -11,9 +11,13 @@ This project uses Pyomo and financial data from Yahoo Finance to build and visua
 import os
 os.environ['PATH'] += ':/content/bin'
 ```
-- !git clone 'LINK'
-- !pip install -r /content/Portfolio-pipeline/requirements.txt
-  !pip install idaes-pse --pre
+- For Cloning:
+```python
+!git clone 'LINK'
+```
+```python
+!pip install -r /content/Portfolio-pipeline/requirements.txt
+```
   
 ```python
 import sys
