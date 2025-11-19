@@ -14,21 +14,19 @@ from pyomo.environ import (
 )
 
 
+import os
+import yfinance as yf
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mtick
+import seaborn as sns
+from pyomo.environ import ConcreteModel, Set, Var, NonNegativeReals, Objective, Constraint, minimize, SolverFactory, TerminationCondition
+
 def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03), step=0.001):
-    """
-    Downloads stock data, analyzes returns, and models efficient frontier until full concentration.
+    output_dir = "BDM_Outputs"
+    os.makedirs(output_dir, exist_ok=True)
 
-    Parameters:
-    - tickers: list of stock tickers
-    - start_date: 'YYYY-MM-DD'
-    - end_date: 'YYYY-MM-DD'
-    - initial_return_range: tuple of min and initial max target returns
-    - step: increment for sweeping return targets
-
-    Returns:
-    - Dictionary with returns, matrices, frontier, and allocation data
-    """
-    # === Step 1: Download and prepare data ===
     price_data = {}
     for t in tickers:
         try:
@@ -51,7 +49,6 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
         print("No valid adjusted close data available. Aborting.")
         return None
 
-    # === Step 2: Return calculations ===
     daily_returns = prep_data.pct_change().dropna()
     log_returns = np.log(prep_data / prep_data.shift(1)).dropna()
     monthly_returns = prep_data.resample('M').ffill().pct_change().dropna()
@@ -59,26 +56,29 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
     cov_matrix = monthly_returns.cov()
     cor_matrix = monthly_returns.corr()
 
-    # === Step 3: Visual diagnostics ===
     (1 + daily_returns).cumprod().plot(figsize=(15, 10))
     plt.title('Cumulative Percentage Returns Over Time')
-    plt.xlabel('Date'); plt.ylabel('Cumulative Return'); plt.grid(True); plt.tight_layout(); plt.show()
+    plt.xlabel('Date'); plt.ylabel('Cumulative Return'); plt.grid(True); plt.tight_layout()
+    plt.savefig(f"{output_dir}/cumulative_returns.png"); plt.close()
 
     daily_returns.plot(subplots=True, grid=True, layout=(4, 4), figsize=(15, 15))
-    plt.suptitle('Daily Simple Returns'); plt.tight_layout(); plt.show()
+    plt.suptitle('Daily Simple Returns'); plt.tight_layout()
+    plt.savefig(f"{output_dir}/daily_returns.png"); plt.close()
 
     monthly_returns.plot(figsize=(15, 6), title='Monthly Returns')
-    plt.grid(True); plt.tight_layout(); plt.show()
+    plt.grid(True); plt.tight_layout()
+    plt.savefig(f"{output_dir}/monthly_returns.png"); plt.close()
 
     plt.figure(figsize=(15, 12))
     sns.heatmap(cov_matrix, annot=True, cmap='coolwarm', fmt=".4f", center=0)
-    plt.title('Covariance Matrix of Monthly Returns'); plt.tight_layout(); plt.show()
+    plt.title('Covariance Matrix of Monthly Returns'); plt.tight_layout()
+    plt.savefig(f"{output_dir}/covariance_heatmap.png"); plt.close()
 
     plt.figure(figsize=(15, 12))
     sns.heatmap(cor_matrix, annot=True, cmap='coolwarm', fmt=".4f", center=0)
-    plt.title('Correlation Matrix of Monthly Returns'); plt.tight_layout(); plt.show()
+    plt.title('Correlation Matrix of Monthly Returns'); plt.tight_layout()
+    plt.savefig(f"{output_dir}/correlation_heatmap.png"); plt.close()
 
-    # === Step 4: Optimization model builder ===
     def build_model(target_return):
         m = ConcreteModel()
         m.assets = Set(initialize=tickers)
@@ -101,7 +101,6 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
         port_risk = np.sqrt(port_variance)
         return solution, port_return, port_risk
 
-    # === Step 5: Adaptive sweep until full concentration ===
     min_r, max_r = initial_return_range
     current_r = min_r
     results = []
@@ -124,7 +123,6 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
                 "weights": clean_weights
             })
 
-            # Check for full concentration
             nonzero_weights = [w for w in clean_weights.values() if w >= 0.01]
             if len(nonzero_weights) == 1 and abs(nonzero_weights[0] - 1.0) < 0.01:
                 max_concentration_reached = True
@@ -136,7 +134,6 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
         print("No feasible portfolios found.")
         return None
 
-    # === Step 6: Plot efficient frontier ===
     frontier_df = pd.DataFrame(results).dropna().sort_values("risk")
     plt.figure(figsize=(8, 5))
     plt.plot(frontier_df["risk"], frontier_df["actual_return"], marker='o', linestyle='-', color='blue')
@@ -146,9 +143,8 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
     plt.grid(True)
     plt.gca().xaxis.set_major_formatter(mtick.FormatStrFormatter('%.3f'))
     plt.tight_layout()
-    plt.show()
+    plt.savefig(f"{output_dir}/efficient_frontier.png"); plt.close()
 
-    # === Step 7: Plot full allocation chart (indexed by risk) ===
     alloc_data = []
     for r in results:
         weights = {t: r["weights"].get(t, 0.0) for t in tickers}
@@ -167,7 +163,17 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
     plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
     plt.gca().xaxis.set_major_formatter(mtick.FormatStrFormatter('%.3f'))
     plt.tight_layout()
-    plt.show()
+    plt.savefig(f"{output_dir}/allocation_spaghetti.png"); plt.close()
+
+    daily_returns.to_csv(f"{output_dir}/daily_returns.csv")
+    log_returns.to_csv(f"{output_dir}/log_returns.csv")
+    monthly_returns.to_csv(f"{output_dir}/monthly_returns.csv")
+    cov_matrix.to_csv(f"{output_dir}/covariance_matrix.csv")
+    cor_matrix.to_csv(f"{output_dir}/correlation_matrix.csv")
+    frontier_df.to_csv(f"{output_dir}/efficient_frontier.csv", index=False)
+    alloc_df.to_csv(f"{output_dir}/allocations.csv")
+
+    print(f"All outputs saved to folder: {output_dir}")
 
     return {
         "daily_returns": daily_returns,
