@@ -13,8 +13,13 @@ os.environ['PATH'] += ':/content/bin'
 ```
 - !git clone 'LINK'
 - !pip install -r /content/Portfolio-pipeline/requirements.txt
-- from portfolio_pipeline import BDM_Project
-
+  !pip install idaes-pse --pre
+  
+```python
+import sys
+sys.path.append('/content/Portfolio-pipeline')
+from main import BDM_Project
+```
 ## Example
 ```python
 BDM_Project(['AAPL', 'MSFT', 'NVDA'], '2021-01-01', '2023-01-01')
