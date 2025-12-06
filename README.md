@@ -15,7 +15,7 @@ os.environ['PATH'] += ':/content/bin'
 ```
 - For Cloning:
 ```python
-!git clone 'LINK'
+!git clone 'PASTE-REPOSITORY-LINK-HERE'
 ```
 ```python
 #This installs the necessary packages for the main function to run
