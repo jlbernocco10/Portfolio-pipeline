@@ -44,7 +44,7 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
     # --- Returns and matrices ---
     daily_returns = prep_data.pct_change().dropna()
     log_returns = np.log(prep_data / prep_data.shift(1)).dropna()
-    monthly_returns = prep_data.resample('M').ffill().pct_change().dropna()
+    monthly_returns = prep_data.resample('ME').ffill().pct_change().dropna()
     avg_return = monthly_returns.mean()
     cov_matrix = monthly_returns.cov()
     cor_matrix = monthly_returns.corr()
