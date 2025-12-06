@@ -18,7 +18,7 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
     output_dir = "BDM_Outputs"
     os.makedirs(output_dir, exist_ok=True)
 
-    # Data
+    # --- Data download ---
     price_data = {}
     for t in tickers:
         try:
@@ -29,81 +29,133 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
                 print(f"Warning: no valid data for {t}")
         except Exception as e:
             print(f"Failed {t}: {e}")
+
     if not price_data:
         print("No valid data retrieved.")
         return None
 
     prep_data = pd.concat(price_data.values(), axis=1)
     prep_data.columns = list(price_data.keys())
+
     if prep_data.empty or prep_data.isnull().all().all():
         print("No valid adjusted close data available. Aborting.")
         return None
 
-    # Returns and matrices
+    # --- Baseline: S&P 500 via SPY (explicit baseline styling later) ---
+    spy = yf.download("SPY", start=start_date, end=end_date, interval="1d", progress=False, auto_adjust=False)
+    if spy.empty or 'Adj Close' not in spy.columns:
+        print("Warning: SPY baseline data unavailable; baseline plots will be skipped.")
+        spy_adj = None
+    else:
+        spy_adj = spy["Adj Close"]
+
+    # --- Returns and matrices ---
     daily_returns = prep_data.pct_change().dropna()
     log_returns = np.log(prep_data / prep_data.shift(1)).dropna()
-    monthly_returns = prep_data.resample('ME').ffill().pct_change().dropna()
+    monthly_returns = prep_data.resample('ME').ffill().pct_change().dropna()  # fixed 'M' -> 'ME'
     avg_return = monthly_returns.mean()
     cov_matrix = monthly_returns.cov()
     cor_matrix = monthly_returns.corr()
 
-    # Plots
-    (1 + daily_returns).cumprod().plot(figsize=(15, 10))
+    # Baseline returns
+    if spy_adj is not None:
+        spy_returns = spy_adj.pct_change().dropna()
+        spy_monthly = spy_adj.resample("ME").ffill().pct_change().dropna()
+        spy_cum = (1 + spy_returns).cumprod()
+        spy_avg_return = spy_monthly.mean()
+        spy_risk = spy_monthly.std()
+    else:
+        spy_returns = None
+        spy_monthly = None
+        spy_cum = None
+        spy_avg_return = None
+        spy_risk = None
+
+    # --- Plots ---
+    # Cumulative returns (portfolio components only)
+    (1 + daily_returns).cumprod().plot(figsize=(15, 10), alpha=0.7)
     plt.title('Cumulative Percentage Returns Over Time')
     plt.xlabel('Date'); plt.ylabel('Cumulative Return'); plt.grid(True); plt.tight_layout()
     plt.savefig(f"{output_dir}/cumulative_returns.png"); plt.close()
 
+    # Cumulative returns with SPY baseline overlay (bold, dashed, standout label)
+    (1 + daily_returns).cumprod().plot(figsize=(15, 10), alpha=0.7)
+    if spy_cum is not None:
+        spy_cum.plot(label="***SPY Baseline (100% S&P)***", color="black", linewidth=3, linestyle="--")
+    plt.title("Cumulative Percentage Returns Over Time")
+    plt.xlabel("Date"); plt.ylabel("Cumulative Return")
+    if spy_cum is not None:
+        plt.legend(fontsize=12, loc="upper left", frameon=True)
+    plt.grid(True); plt.tight_layout()
+    plt.savefig(f"{output_dir}/cumulative_returns_with_baseline.png"); plt.close()
+
+    # Small multiples of daily returns
     n = len(tickers)
-    cols = math.ceil(math.sqrt(n)); rows = math.ceil(n / cols)
+    cols = math.ceil(math.sqrt(n))
+    rows = math.ceil(n / cols)
     daily_returns.plot(subplots=True, grid=True, layout=(rows, cols), figsize=(4 * cols, 3 * rows))
     plt.suptitle('Daily Simple Returns'); plt.tight_layout()
     plt.savefig(f"{output_dir}/daily_returns.png"); plt.close()
 
+    # Monthly returns plot
     monthly_returns.plot(figsize=(15, 6), title='Monthly Returns')
     plt.grid(True); plt.tight_layout()
     plt.savefig(f"{output_dir}/monthly_returns.png"); plt.close()
 
+    # Covariance heatmap
     plt.figure(figsize=(15, 12))
     sns.heatmap(cov_matrix, annot=True, cmap='coolwarm', fmt=".4f", center=0)
     plt.title('Covariance Matrix of Monthly Returns'); plt.tight_layout()
     plt.savefig(f"{output_dir}/covariance_heatmap.png"); plt.close()
 
+    # Correlation heatmap
     plt.figure(figsize=(15, 12))
     sns.heatmap(cor_matrix, annot=True, cmap='coolwarm', fmt=".4f", center=0)
     plt.title('Correlation Matrix of Monthly Returns'); plt.tight_layout()
     plt.savefig(f"{output_dir}/correlation_heatmap.png"); plt.close()
 
-    # Model
+    # --- Model builder with binary constraint ---
     def build_model(target_return):
         m = ConcreteModel()
         m.assets = Set(initialize=tickers)
+
+        # Continuous allocation variables
         m.x = Var(m.assets, domain=NonNegativeReals, bounds=(0, 1))
+
+        # Binary selection variables
         m.y = Var(m.assets, domain=Binary)
 
+        # Objective: minimize portfolio variance
         def portfolio_variance(m):
             return sum(m.x[i] * cov_matrix.loc[i, j] * m.x[j] for i in m.assets for j in m.assets)
         m.obj = Objective(rule=portfolio_variance, sense=minimize)
 
+        # Total allocation must equal 1
         m.total_allocation = Constraint(expr=sum(m.x[i] for i in m.assets) == 1)
+
+        # Target return constraint
         m.target_return = Constraint(expr=sum(m.x[i] * avg_return[i] for i in m.assets) >= target_return)
 
+        # Linking constraint: allocation only if binary is active
         bigM = 1.0
         m.link_binary = ConstraintList()
         for i in m.assets:
             m.link_binary.add(m.x[i] <= bigM * m.y[i])
 
+        # Limit number of assets selected
         m.max_assets = Constraint(expr=sum(m.y[i] for i in m.assets) <= max_assets)
+
         return m
 
     def solve_and_extract(m):
-        SolverFactory("bonmin").solve(m)
+        SolverFactory("bonmin").solve(m)  # BONMIN for MINLP
         solution = {i: m.x[i].value or 0.0 for i in m.assets}
         port_return = sum(solution[i] * avg_return[i] for i in m.assets)
         port_variance = sum(solution[i] * cov_matrix.loc[i, j] * solution[j] for i in m.assets for j in m.assets)
         port_risk = float(np.sqrt(port_variance))
         return solution, port_return, port_risk
 
-    # Frontier
+    # --- Frontier loop ---
     min_r, max_r = initial_return_range
     current_r = min_r
     results = []
@@ -125,6 +177,8 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
                 "risk": port_risk,
                 "weights": clean_weights
             })
+
+            # Stop if everything collapses to a single asset
             nonzero_weights = [w for w in clean_weights.values() if w >= 0.01]
             if len(nonzero_weights) == 1 and abs(nonzero_weights[0] - 1.0) < 0.01:
                 max_concentration_reached = True
@@ -136,6 +190,7 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
         print("No feasible portfolios found.")
         return None
 
+    # --- Efficient frontier plot (without baseline) ---
     frontier_df = pd.DataFrame(results).dropna().sort_values("risk")
     plt.figure(figsize=(8, 5))
     plt.plot(frontier_df["risk"], frontier_df["actual_return"], marker='o', linestyle='-', color='blue')
@@ -147,11 +202,29 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
     plt.tight_layout()
     plt.savefig(f"{output_dir}/efficient_frontier.png"); plt.close()
 
+    # --- Efficient frontier with SPY baseline ---
+    plt.figure(figsize=(8, 5))
+    plt.plot(frontier_df["risk"], frontier_df["actual_return"], marker='o', linestyle='-', color='blue', label="Efficient Frontier")
+    if (spy_avg_return is not None) and (spy_risk is not None):
+        plt.scatter(spy_risk, spy_avg_return, color="red", marker="*", s=300, label="***SPY Baseline (100% S&P)***")
+    plt.title("Efficient Frontier vs. SPY Baseline")
+    plt.xlabel("Portfolio Risk (Std Dev)")
+    plt.ylabel("Expected Return")
+    if (spy_avg_return is not None) and (spy_risk is not None):
+        plt.legend(fontsize=12, loc="best", frameon=True)
+    plt.grid(True)
+    plt.gca().xaxis.set_major_formatter(mtick.FormatStrFormatter('%.3f'))
+    plt.tight_layout()
+    plt.savefig(f"{output_dir}/efficient_frontier_with_baseline.png"); plt.close()
+
+    # --- Allocation spaghetti plot ---
     alloc_data = []
     for r in results:
         weights = {t: r["weights"].get(t, 0.0) for t in tickers}
         alloc_data.append(weights)
-    alloc_df = pd.DataFrame(alloc_data, index=[r["risk"] for r in results]).sort_index()
+
+    alloc_df = pd.DataFrame(alloc_data, index=[r["risk"] for r in results])
+    alloc_df = alloc_df.sort_index()
 
     plt.figure(figsize=(12, 6))
     for col in alloc_df.columns:
@@ -165,17 +238,20 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
     plt.tight_layout()
     plt.savefig(f"{output_dir}/allocation_spaghetti.png"); plt.close()
 
-    # Allocation bar charts with % labels
+    # --- Conservative, Balanced, High-Risk allocation plots ---
     def plot_allocation(weights_dict, title, filename):
         if not weights_dict:
             print(f"Skipping {title} — no weights found.")
             return
+
         plt.figure(figsize=(10, 6))
-        bars = plt.bar(weights_dict.keys(), weights_dict.values())
+        bars = plt.bar(weights_dict.keys(), weights_dict.values(), color="#4C78A8")
         plt.title(title)
         plt.xlabel("Assets")
         plt.ylabel("Weight")
         plt.xticks(rotation=45)
+
+        # Percentage labels
         for bar in bars:
             h = bar.get_height()
             if h > 0:
@@ -187,6 +263,7 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
                     va="bottom",
                     fontsize=9
                 )
+
         plt.tight_layout()
         plt.savefig(f"{output_dir}/{filename}")
         plt.close()
@@ -199,7 +276,7 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
     plot_allocation(balanced["weights"], "Balanced Portfolio Allocation", "alloc_balanced.png")
     plot_allocation(high_risk["weights"], "High-Risk Portfolio Allocation", "alloc_highrisk.png")
 
-    # Save outputs
+    # --- Save outputs ---
     daily_returns.to_csv(f"{output_dir}/daily_returns.csv")
     log_returns.to_csv(f"{output_dir}/log_returns.csv")
     monthly_returns.to_csv(f"{output_dir}/monthly_returns.csv")
@@ -207,6 +284,12 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
     cor_matrix.to_csv(f"{output_dir}/correlation_matrix.csv")
     frontier_df.to_csv(f"{output_dir}/efficient_frontier.csv", index=False)
     alloc_df.to_csv(f"{output_dir}/allocations.csv")
+
+    # Baseline CSVs
+    if spy_returns is not None:
+        spy_returns.to_csv(f"{output_dir}/spy_daily_returns.csv")
+    if spy_monthly is not None:
+        spy_monthly.to_csv(f"{output_dir}/spy_monthly_returns.csv")
 
     print(f"All outputs saved to folder: {output_dir}")
 
@@ -217,6 +300,8 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
         "covariance_matrix": cov_matrix,
         "correlation_matrix": cor_matrix,
         "efficient_frontier": frontier_df,
-        "allocations": alloc_df
+        "allocations": alloc_df,
+        "spy_daily_returns": spy_returns,
+        "spy_monthly_returns": spy_monthly
     }
     
