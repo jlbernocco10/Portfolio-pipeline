@@ -14,11 +14,11 @@ from pyomo.environ import (
     NonNegativeReals, minimize, SolverFactory, TerminationCondition
 )
 
-
-def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03), step=0.001):
+def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03), step=0.001, max_assets=5):
     output_dir = "BDM_Outputs"
     os.makedirs(output_dir, exist_ok=True)
 
+    # --- Data download ---
     price_data = {}
     for t in tickers:
         try:
@@ -41,6 +41,7 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
         print("No valid adjusted close data available. Aborting.")
         return None
 
+    # --- Returns and matrices ---
     daily_returns = prep_data.pct_change().dropna()
     log_returns = np.log(prep_data / prep_data.shift(1)).dropna()
     monthly_returns = prep_data.resample('M').ffill().pct_change().dropna()
@@ -48,12 +49,12 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
     cov_matrix = monthly_returns.cov()
     cor_matrix = monthly_returns.corr()
 
+    # --- Plots ---
     (1 + daily_returns).cumprod().plot(figsize=(15, 10))
     plt.title('Cumulative Percentage Returns Over Time')
     plt.xlabel('Date'); plt.ylabel('Cumulative Return'); plt.grid(True); plt.tight_layout()
     plt.savefig(f"{output_dir}/cumulative_returns.png"); plt.close()
 
-    # Dynamic subplot layout
     n = len(tickers)
     cols = math.ceil(math.sqrt(n))
     rows = math.ceil(n / cols)
@@ -75,28 +76,48 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
     plt.title('Correlation Matrix of Monthly Returns'); plt.tight_layout()
     plt.savefig(f"{output_dir}/correlation_heatmap.png"); plt.close()
 
+    # --- Model builder with binary constraint ---
     def build_model(target_return):
         m = ConcreteModel()
         m.assets = Set(initialize=tickers)
+
+        # Continuous allocation variables
         m.x = Var(m.assets, domain=NonNegativeReals, bounds=(0, 1))
 
+        # Binary selection variables
+        m.y = Var(m.assets, domain=Binary)
+
+        # Objective: minimize portfolio variance
         def portfolio_variance(m):
             return sum(m.x[i] * cov_matrix.loc[i, j] * m.x[j] for i in m.assets for j in m.assets)
         m.obj = Objective(rule=portfolio_variance, sense=minimize)
 
+        # Total allocation must equal 1
         m.total_allocation = Constraint(expr=sum(m.x[i] for i in m.assets) == 1)
+
+        # Target return constraint
         m.target_return = Constraint(expr=sum(m.x[i] * avg_return[i] for i in m.assets) >= target_return)
+
+        # Linking constraint: allocation only if binary is active
+        bigM = 1.0
+        m.link_binary = ConstraintList()
+        for i in m.assets:
+            m.link_binary.add(m.x[i] <= bigM * m.y[i])
+
+        # Limit number of assets selected
+        m.max_assets = Constraint(expr=sum(m.y[i] for i in m.assets) <= max_assets)
 
         return m
 
     def solve_and_extract(m):
-        SolverFactory("ipopt").solve(m)
+        SolverFactory("bonmin").solve(m)  # switched to BONMIN
         solution = {i: m.x[i].value for i in m.assets}
         port_return = sum(solution[i] * avg_return[i] for i in m.assets)
         port_variance = sum(solution[i] * cov_matrix.loc[i, j] * solution[j] for i in m.assets for j in m.assets)
         port_risk = np.sqrt(port_variance)
         return solution, port_return, port_risk
 
+    # --- Frontier loop ---
     min_r, max_r = initial_return_range
     current_r = min_r
     results = []
@@ -104,7 +125,7 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
 
     while not max_concentration_reached and current_r <= max_r + 0.1:
         m = build_model(target_return=current_r)
-        result = SolverFactory("ipopt").solve(m)
+        result = SolverFactory("bonmin").solve(m)
         if result.solver.termination_condition != TerminationCondition.optimal:
             print(f"Skipping return target {current_r:.4f} — infeasible.")
             current_r += step
@@ -130,6 +151,7 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
         print("No feasible portfolios found.")
         return None
 
+    # --- Efficient frontier plot ---
     frontier_df = pd.DataFrame(results).dropna().sort_values("risk")
     plt.figure(figsize=(8, 5))
     plt.plot(frontier_df["risk"], frontier_df["actual_return"], marker='o', linestyle='-', color='blue')
@@ -141,6 +163,7 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
     plt.tight_layout()
     plt.savefig(f"{output_dir}/efficient_frontier.png"); plt.close()
 
+    # --- Allocation spaghetti plot ---
     alloc_data = []
     for r in results:
         weights = {t: r["weights"].get(t, 0.0) for t in tickers}
@@ -161,6 +184,7 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
     plt.tight_layout()
     plt.savefig(f"{output_dir}/allocation_spaghetti.png"); plt.close()
 
+    # --- Save outputs ---
     daily_returns.to_csv(f"{output_dir}/daily_returns.csv")
     log_returns.to_csv(f"{output_dir}/log_returns.csv")
     monthly_returns.to_csv(f"{output_dir}/monthly_returns.csv")
