@@ -28,6 +28,23 @@ import sys
 sys.path.append('/content/Portfolio-pipeline')
 from main import BDM_Project
 ```
-## Example
+## Example of a diversified Portfolio for testing
 ```python
-BDM_Project(['AAPL', 'MSFT', 'NVDA'], '2021-01-01', '2023-01-01')
+BDM_Project([
+    "AAPL",  # Apple - Technology
+    "MSFT",  # Microsoft - Technology
+    "NVDA",  # NVIDIA - Semiconductors
+    "JNJ",   # Johnson & Johnson - Healthcare
+    "PFE",   # Pfizer - Healthcare
+    "JPM",   # JPMorgan Chase - Financials
+    "GS",    # Goldman Sachs - Financials
+    "AMZN",  # Amazon - Consumer Discretionary
+    "TSLA",  # Tesla - Consumer Discretionary
+    "PG",    # Procter & Gamble - Consumer Staples
+    "KO",    # Coca-Cola - Consumer Staples
+    "CAT",   # Caterpillar - Industrials
+    "BA",    # Boeing - Industrials
+    "XOM",   # ExxonMobil - Energy
+    "NEE"    # NextEra Energy - Utilities
+]
+, '2021-01-01', '2023-01-01')
