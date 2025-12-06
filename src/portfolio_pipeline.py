@@ -10,8 +10,8 @@ import seaborn as sns
 import yfinance as yf
 import pyomo.environ as pyo
 from pyomo.environ import (
-    ConcreteModel, Set, Var, Objective, Constraint,
-    NonNegativeReals, minimize, SolverFactory, TerminationCondition
+    ConcreteModel, Set, Var, NonNegativeReals, Binary,
+    Objective, Constraint, ConstraintList, minimize, SolverFactory, TerminationCondition
 )
 
 def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03), step=0.001, max_assets=5):
