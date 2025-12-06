@@ -185,16 +185,25 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
     plt.savefig(f"{output_dir}/allocation_spaghetti.png"); plt.close()
 
     # --- Conservative, Balanced, High-Risk allocation plots ---
-    def plot_allocation(weights_dict, title, filename):
-        plt.figure(figsize=(10, 6))
-        plt.bar(weights_dict.keys(), weights_dict.values())
-        plt.title(title)
-        plt.xlabel("Assets")
-        plt.ylabel("Weight")
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        plt.savefig(f"{output_dir}/{filename}")
-        plt.close()
+def plot_allocation(weights_dict, title, filename):
+    plt.figure(figsize=(10, 6))
+    bars = plt.bar(weights_dict.keys(), weights_dict.values())
+    plt.title(title)
+    plt.xlabel("Assets")
+    plt.ylabel("Weight")
+    plt.xticks(rotation=45)
+
+    # Add percentage labels on top of each bar
+    for bar in bars:
+        height = bar.get_height()
+        plt.text(
+            bar.get_x() + bar.get_width() / 2,
+            height,
+            f"{height:.1%}",   # format as percentage
+            ha="center",
+            va="bottom",
+            fontsize=9
+        )
 
     conservative = frontier_df.iloc[0]
     balanced = frontier_df.iloc[len(frontier_df)//2]
