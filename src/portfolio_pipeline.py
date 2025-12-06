@@ -18,7 +18,7 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
     output_dir = "BDM_Outputs"
     os.makedirs(output_dir, exist_ok=True)
 
-    # --- Data download ---
+    # Data
     price_data = {}
     for t in tickers:
         try:
@@ -29,35 +29,32 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
                 print(f"Warning: no valid data for {t}")
         except Exception as e:
             print(f"Failed {t}: {e}")
-
     if not price_data:
         print("No valid data retrieved.")
         return None
 
     prep_data = pd.concat(price_data.values(), axis=1)
     prep_data.columns = list(price_data.keys())
-
     if prep_data.empty or prep_data.isnull().all().all():
         print("No valid adjusted close data available. Aborting.")
         return None
 
-    # --- Returns and matrices ---
+    # Returns and matrices
     daily_returns = prep_data.pct_change().dropna()
     log_returns = np.log(prep_data / prep_data.shift(1)).dropna()
-    monthly_returns = prep_data.resample('ME').ffill().pct_change().dropna()  # fixed 'M' -> 'ME'
+    monthly_returns = prep_data.resample('ME').ffill().pct_change().dropna()
     avg_return = monthly_returns.mean()
     cov_matrix = monthly_returns.cov()
     cor_matrix = monthly_returns.corr()
 
-    # --- Plots ---
+    # Plots
     (1 + daily_returns).cumprod().plot(figsize=(15, 10))
     plt.title('Cumulative Percentage Returns Over Time')
     plt.xlabel('Date'); plt.ylabel('Cumulative Return'); plt.grid(True); plt.tight_layout()
     plt.savefig(f"{output_dir}/cumulative_returns.png"); plt.close()
 
     n = len(tickers)
-    cols = math.ceil(math.sqrt(n))
-    rows = math.ceil(n / cols)
+    cols = math.ceil(math.sqrt(n)); rows = math.ceil(n / cols)
     daily_returns.plot(subplots=True, grid=True, layout=(rows, cols), figsize=(4 * cols, 3 * rows))
     plt.suptitle('Daily Simple Returns'); plt.tight_layout()
     plt.savefig(f"{output_dir}/daily_returns.png"); plt.close()
@@ -76,48 +73,37 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
     plt.title('Correlation Matrix of Monthly Returns'); plt.tight_layout()
     plt.savefig(f"{output_dir}/correlation_heatmap.png"); plt.close()
 
-    # --- Model builder with binary constraint ---
+    # Model
     def build_model(target_return):
         m = ConcreteModel()
         m.assets = Set(initialize=tickers)
-
-        # Continuous allocation variables
         m.x = Var(m.assets, domain=NonNegativeReals, bounds=(0, 1))
-
-        # Binary selection variables
         m.y = Var(m.assets, domain=Binary)
 
-        # Objective: minimize portfolio variance
         def portfolio_variance(m):
             return sum(m.x[i] * cov_matrix.loc[i, j] * m.x[j] for i in m.assets for j in m.assets)
         m.obj = Objective(rule=portfolio_variance, sense=minimize)
 
-        # Total allocation must equal 1
         m.total_allocation = Constraint(expr=sum(m.x[i] for i in m.assets) == 1)
-
-        # Target return constraint
         m.target_return = Constraint(expr=sum(m.x[i] * avg_return[i] for i in m.assets) >= target_return)
 
-        # Linking constraint: allocation only if binary is active
         bigM = 1.0
         m.link_binary = ConstraintList()
         for i in m.assets:
             m.link_binary.add(m.x[i] <= bigM * m.y[i])
 
-        # Limit number of assets selected
         m.max_assets = Constraint(expr=sum(m.y[i] for i in m.assets) <= max_assets)
-
         return m
 
     def solve_and_extract(m):
-        SolverFactory("bonmin").solve(m)  # BONMIN for mixed-integer nonlinear
-        solution = {i: m.x[i].value for i in m.assets}
+        SolverFactory("bonmin").solve(m)
+        solution = {i: m.x[i].value or 0.0 for i in m.assets}
         port_return = sum(solution[i] * avg_return[i] for i in m.assets)
         port_variance = sum(solution[i] * cov_matrix.loc[i, j] * solution[j] for i in m.assets for j in m.assets)
-        port_risk = np.sqrt(port_variance)
+        port_risk = float(np.sqrt(port_variance))
         return solution, port_return, port_risk
 
-    # --- Frontier loop ---
+    # Frontier
     min_r, max_r = initial_return_range
     current_r = min_r
     results = []
@@ -132,14 +118,13 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
             continue
         try:
             solution, port_return, port_risk = solve_and_extract(m)
-            clean_weights = {t: solution.get(t, 0.0) or 0.0 for t in tickers}
+            clean_weights = {t: solution.get(t, 0.0) for t in tickers}
             results.append({
                 "target_return": current_r,
                 "actual_return": port_return,
                 "risk": port_risk,
                 "weights": clean_weights
             })
-
             nonzero_weights = [w for w in clean_weights.values() if w >= 0.01]
             if len(nonzero_weights) == 1 and abs(nonzero_weights[0] - 1.0) < 0.01:
                 max_concentration_reached = True
@@ -151,7 +136,6 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
         print("No feasible portfolios found.")
         return None
 
-    # --- Efficient frontier plot ---
     frontier_df = pd.DataFrame(results).dropna().sort_values("risk")
     plt.figure(figsize=(8, 5))
     plt.plot(frontier_df["risk"], frontier_df["actual_return"], marker='o', linestyle='-', color='blue')
@@ -163,14 +147,11 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
     plt.tight_layout()
     plt.savefig(f"{output_dir}/efficient_frontier.png"); plt.close()
 
-    # --- Allocation spaghetti plot ---
     alloc_data = []
     for r in results:
         weights = {t: r["weights"].get(t, 0.0) for t in tickers}
         alloc_data.append(weights)
-
-    alloc_df = pd.DataFrame(alloc_data, index=[r["risk"] for r in results])
-    alloc_df = alloc_df.sort_index()
+    alloc_df = pd.DataFrame(alloc_data, index=[r["risk"] for r in results]).sort_index()
 
     plt.figure(figsize=(12, 6))
     for col in alloc_df.columns:
@@ -184,45 +165,41 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
     plt.tight_layout()
     plt.savefig(f"{output_dir}/allocation_spaghetti.png"); plt.close()
 
-    # --- Conservative, Balanced, High-Risk allocation plots ---
-def plot_allocation(weights_dict, title, filename):
-    if not weights_dict:  # safeguard against empty dicts
-        print(f"Skipping {title} — no weights found.")
-        return
+    # Allocation bar charts with % labels
+    def plot_allocation(weights_dict, title, filename):
+        if not weights_dict:
+            print(f"Skipping {title} — no weights found.")
+            return
+        plt.figure(figsize=(10, 6))
+        bars = plt.bar(weights_dict.keys(), weights_dict.values())
+        plt.title(title)
+        plt.xlabel("Assets")
+        plt.ylabel("Weight")
+        plt.xticks(rotation=45)
+        for bar in bars:
+            h = bar.get_height()
+            if h > 0:
+                plt.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    h,
+                    f"{h:.1%}",
+                    ha="center",
+                    va="bottom",
+                    fontsize=9
+                )
+        plt.tight_layout()
+        plt.savefig(f"{output_dir}/{filename}")
+        plt.close()
 
-    plt.figure(figsize=(10, 6))
-    bars = plt.bar(weights_dict.keys(), weights_dict.values())
-    plt.title(title)
-    plt.xlabel("Assets")
-    plt.ylabel("Weight")
-    plt.xticks(rotation=45)
+    conservative = frontier_df.iloc[0]
+    balanced = frontier_df.iloc[len(frontier_df)//2]
+    high_risk = frontier_df.iloc[-1]
 
-    # Add percentage labels on top of each bar
-    for bar in bars:
-        height = bar.get_height()
-        if height > 0:  # only label non-zero allocations
-            plt.text(
-                bar.get_x() + bar.get_width() / 2,
-                height,
-                f"{height:.1%}",   # format as percentage
-                ha="center",
-                va="bottom",
-                fontsize=9
-            )
+    plot_allocation(conservative["weights"], "Conservative Portfolio Allocation", "alloc_conservative.png")
+    plot_allocation(balanced["weights"], "Balanced Portfolio Allocation", "alloc_balanced.png")
+    plot_allocation(high_risk["weights"], "High-Risk Portfolio Allocation", "alloc_highrisk.png")
 
-    plt.tight_layout()
-    plt.savefig(f"{output_dir}/{filename}")
-    plt.close()
-
-conservative = frontier_df.iloc[0]
-balanced = frontier_df.iloc[len(frontier_df)//2]
-high_risk = frontier_df.iloc[-1]
-
-plot_allocation(conservative["weights"], "Conservative Portfolio Allocation", "alloc_conservative.png")
-plot_allocation(balanced["weights"], "Balanced Portfolio Allocation", "alloc_balanced.png")
-plot_allocation(high_risk["weights"], "High-Risk Portfolio Allocation", "alloc_highrisk.png")
-    
-# --- Save outputs ---
+    # Save outputs
     daily_returns.to_csv(f"{output_dir}/daily_returns.csv")
     log_returns.to_csv(f"{output_dir}/log_returns.csv")
     monthly_returns.to_csv(f"{output_dir}/monthly_returns.csv")
