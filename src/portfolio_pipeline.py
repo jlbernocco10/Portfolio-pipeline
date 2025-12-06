@@ -44,7 +44,7 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
     # --- Returns and matrices ---
     daily_returns = prep_data.pct_change().dropna()
     log_returns = np.log(prep_data / prep_data.shift(1)).dropna()
-    monthly_returns = prep_data.resample('ME').ffill().pct_change().dropna()
+    monthly_returns = prep_data.resample('ME').ffill().pct_change().dropna()  # fixed 'M' -> 'ME'
     avg_return = monthly_returns.mean()
     cov_matrix = monthly_returns.cov()
     cor_matrix = monthly_returns.corr()
@@ -110,7 +110,7 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
         return m
 
     def solve_and_extract(m):
-        SolverFactory("bonmin").solve(m)  # switched to BONMIN
+        SolverFactory("bonmin").solve(m)  # BONMIN for mixed-integer nonlinear
         solution = {i: m.x[i].value for i in m.assets}
         port_return = sum(solution[i] * avg_return[i] for i in m.assets)
         port_variance = sum(solution[i] * cov_matrix.loc[i, j] * solution[j] for i in m.assets for j in m.assets)
@@ -184,6 +184,26 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
     plt.tight_layout()
     plt.savefig(f"{output_dir}/allocation_spaghetti.png"); plt.close()
 
+    # --- Conservative, Balanced, High-Risk allocation plots ---
+    def plot_allocation(weights_dict, title, filename):
+        plt.figure(figsize=(10, 6))
+        plt.bar(weights_dict.keys(), weights_dict.values())
+        plt.title(title)
+        plt.xlabel("Assets")
+        plt.ylabel("Weight")
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        plt.savefig(f"{output_dir}/{filename}")
+        plt.close()
+
+    conservative = frontier_df.iloc[0]
+    balanced = frontier_df.iloc[len(frontier_df)//2]
+    high_risk = frontier_df.iloc[-1]
+
+    plot_allocation(conservative["weights"], "Conservative Portfolio Allocation", "alloc_conservative.png")
+    plot_allocation(balanced["weights"], "Balanced Portfolio Allocation", "alloc_balanced.png")
+    plot_allocation(high_risk["weights"], "High-Risk Portfolio Allocation", "alloc_highrisk.png")
+
     # --- Save outputs ---
     daily_returns.to_csv(f"{output_dir}/daily_returns.csv")
     log_returns.to_csv(f"{output_dir}/log_returns.csv")
@@ -204,3 +224,4 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
         "efficient_frontier": frontier_df,
         "allocations": alloc_df
     }
+    
