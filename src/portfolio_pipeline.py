@@ -221,8 +221,8 @@ high_risk = frontier_df.iloc[-1]
 plot_allocation(conservative["weights"], "Conservative Portfolio Allocation", "alloc_conservative.png")
 plot_allocation(balanced["weights"], "Balanced Portfolio Allocation", "alloc_balanced.png")
 plot_allocation(high_risk["weights"], "High-Risk Portfolio Allocation", "alloc_highrisk.png")
-
-    # --- Save outputs ---
+    
+# --- Save outputs ---
     daily_returns.to_csv(f"{output_dir}/daily_returns.csv")
     log_returns.to_csv(f"{output_dir}/log_returns.csv")
     monthly_returns.to_csv(f"{output_dir}/monthly_returns.csv")
