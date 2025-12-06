@@ -186,6 +186,10 @@ def BDM_Project(tickers, start_date, end_date, initial_return_range=(0.005, 0.03
 
     # --- Conservative, Balanced, High-Risk allocation plots ---
 def plot_allocation(weights_dict, title, filename):
+    if not weights_dict:  # safeguard against empty dicts
+        print(f"Skipping {title} — no weights found.")
+        return
+
     plt.figure(figsize=(10, 6))
     bars = plt.bar(weights_dict.keys(), weights_dict.values())
     plt.title(title)
@@ -196,22 +200,27 @@ def plot_allocation(weights_dict, title, filename):
     # Add percentage labels on top of each bar
     for bar in bars:
         height = bar.get_height()
-        plt.text(
-            bar.get_x() + bar.get_width() / 2,
-            height,
-            f"{height:.1%}",   # format as percentage
-            ha="center",
-            va="bottom",
-            fontsize=9
-        )
+        if height > 0:  # only label non-zero allocations
+            plt.text(
+                bar.get_x() + bar.get_width() / 2,
+                height,
+                f"{height:.1%}",   # format as percentage
+                ha="center",
+                va="bottom",
+                fontsize=9
+            )
 
-    conservative = frontier_df.iloc[0]
-    balanced = frontier_df.iloc[len(frontier_df)//2]
-    high_risk = frontier_df.iloc[-1]
+    plt.tight_layout()
+    plt.savefig(f"{output_dir}/{filename}")
+    plt.close()
 
-    plot_allocation(conservative["weights"], "Conservative Portfolio Allocation", "alloc_conservative.png")
-    plot_allocation(balanced["weights"], "Balanced Portfolio Allocation", "alloc_balanced.png")
-    plot_allocation(high_risk["weights"], "High-Risk Portfolio Allocation", "alloc_highrisk.png")
+conservative = frontier_df.iloc[0]
+balanced = frontier_df.iloc[len(frontier_df)//2]
+high_risk = frontier_df.iloc[-1]
+
+plot_allocation(conservative["weights"], "Conservative Portfolio Allocation", "alloc_conservative.png")
+plot_allocation(balanced["weights"], "Balanced Portfolio Allocation", "alloc_balanced.png")
+plot_allocation(high_risk["weights"], "High-Risk Portfolio Allocation", "alloc_highrisk.png")
 
     # --- Save outputs ---
     daily_returns.to_csv(f"{output_dir}/daily_returns.csv")
