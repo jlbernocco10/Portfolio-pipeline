@@ -223,23 +223,23 @@ plot_allocation(balanced["weights"], "Balanced Portfolio Allocation", "alloc_bal
 plot_allocation(high_risk["weights"], "High-Risk Portfolio Allocation", "alloc_highrisk.png")
 
     # --- Save outputs ---
-    daily_returns.to_csv(f"{output_dir}/daily_returns.csv")
-    log_returns.to_csv(f"{output_dir}/log_returns.csv")
-    monthly_returns.to_csv(f"{output_dir}/monthly_returns.csv")
-    cov_matrix.to_csv(f"{output_dir}/covariance_matrix.csv")
-    cor_matrix.to_csv(f"{output_dir}/correlation_matrix.csv")
-    frontier_df.to_csv(f"{output_dir}/efficient_frontier.csv", index=False)
-    alloc_df.to_csv(f"{output_dir}/allocations.csv")
+daily_returns.to_csv(f"{output_dir}/daily_returns.csv")
+log_returns.to_csv(f"{output_dir}/log_returns.csv")
+monthly_returns.to_csv(f"{output_dir}/monthly_returns.csv")
+cov_matrix.to_csv(f"{output_dir}/covariance_matrix.csv")
+cor_matrix.to_csv(f"{output_dir}/correlation_matrix.csv")
+frontier_df.to_csv(f"{output_dir}/efficient_frontier.csv", index=False)
+alloc_df.to_csv(f"{output_dir}/allocations.csv")
 
-    print(f"All outputs saved to folder: {output_dir}")
+print(f"All outputs saved to folder: {output_dir}")
 
-    return {
-        "daily_returns": daily_returns,
-        "log_returns": log_returns,
-        "monthly_returns": monthly_returns,
-        "covariance_matrix": cov_matrix,
-        "correlation_matrix": cor_matrix,
-        "efficient_frontier": frontier_df,
-        "allocations": alloc_df
-    }
+return {
+    "daily_returns": daily_returns,
+    "log_returns": log_returns,
+    "monthly_returns": monthly_returns,
+    "covariance_matrix": cov_matrix,
+    "correlation_matrix": cor_matrix,
+    "efficient_frontier": frontier_df,
+    "allocations": alloc_df
+}
     
