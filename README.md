@@ -34,7 +34,7 @@ import sys
 sys.path.append('/content/Portfolio-pipeline')
 from main import BDM_Project
 ```
-## Example of a diversified Portfolio for testing
+## Example of a Diversified Portfolio for Testing
 ```python
 BDM_Project([
     "AAPL",  # Apple - Technology
