@@ -1,7 +1,13 @@
 # Stock Porfolio Allocation Modeling
-*this project was designed for my Business Decision Modeling graduate class.
+*This project was designed for my Business Decision Modeling graduate class. THIS IS NOT FINANCIAL ADVICE, just simple data analyses with python.
 
 This project uses Pyomo and financial data from Yahoo Finance to build and visualize efficient frontiers. All outputs are saved to a file in the local environment called 'BDM_Ouputs'. This model accounts for correlation and covariance of given stocks based on the date range provided. It then conducts a risk sweep and builds an Efficent Frontier to display risk and expected return. It also outputs weighted allocations for each stock.
+
+## Table of Contents
+- Structure
+- Example
+- Navigating Function Outputs
+- Error Handeling
 
 ## Structure
 - FOR GOOGLE COLAB USE, YOU MUST USE THIS AT THE TOP OF THE SCRIPT:
@@ -48,3 +54,12 @@ BDM_Project([
     "NEE"    # NextEra Energy - Utilities
 ]
 , '2021-01-01', '2023-01-01')
+```
+## Navigating Function Outputs
+- All outputs will be stored here: '/content/BDM_Outputs'
+- 3 recommendations for Stock Allocations will be generated: A High Risk, Conservative, and Balanced Portfolio. Found here: /content/BDM_Outputs/alloc_balanced.png, /content/BDM_Outputs/alloc_conservative.png, /content/BDM_Outputs/alloc_highrisk.png
+- The Efficient Frontier (/content/BDM_Outputs/efficient_frontier.png) shows Risk vs Expected Return and is used to determien the portfolio options above. Also Available is an efficient frontier with the baseline of a 100% investment in the S&P 500.
+- Other outputs are all the raw data used to calculate the outputs above and can be examined for a further deep dive into the individual stock data.
+
+## Error Handeling
+The most likely error to occur is with your ticker selection and date range. If your ticker does not have data for a given date range, it will not output. Other potential errors may result from infeasible solutions based on the stocks selected and the calculated risk. I reccomend using at least 5 tickers and starting with a recent date range (i.e. 1-5 years). Note: the "Example" above works and is a good starting point.
